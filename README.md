@@ -4,6 +4,8 @@
 
 ![Demo](assets/demo.jpeg)
 
+![Demo GIF](assets/demo2.gif)
+
 `src/index.ts:58-139` builds a `THREE.Scene` with a perspective camera, 9 Phong-shaded meshes (TorusKnot, Dodecahedron, Torus, Box, Icosahedron), a checkerboard depth plane, and 4 lights (Ambient + 2 Directional + 1 orbiting PointLight). Everything is rasterized by `ThreeCliRenderer` into a `FrameBufferRenderable` at 60 FPS and converted to terminal glyphs. Yes, it's definitely 3D.
 
 ## Features
