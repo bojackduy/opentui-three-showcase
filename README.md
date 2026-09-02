@@ -2,7 +2,7 @@
 
 > A neon 3×3 arcade wall rendered with **real Three.js geometry**, perspective projection, and WebGPU lighting — directly inside a terminal framebuffer via [OpenTUI](https://github.com/anomalyco/opencode).
 
-![Demo](assets/demo.png)
+![Demo](assets/demo.jpeg)
 
 `src/index.ts:58-139` builds a `THREE.Scene` with a perspective camera, 9 Phong-shaded meshes (TorusKnot, Dodecahedron, Torus, Box, Icosahedron), a checkerboard depth plane, and 4 lights (Ambient + 2 Directional + 1 orbiting PointLight). Everything is rasterized by `ThreeCliRenderer` into a `FrameBufferRenderable` at 60 FPS and converted to terminal glyphs. Yes, it's definitely 3D.
 
@@ -14,17 +14,17 @@
 - **Live lighting** — warm/cool directional lights + magenta point light orbiting at `sin(elapsed)` (`src/index.ts:66-77`, `277`)
 - **GPU supersampling** — cycle `GPU → CPU → OFF` with `U` (`SuperSampleType.GPU`, `src/index.ts:172-244`)
 - **Responsive** — usable at 80×24, adapts to terminal resizes (`src/index.ts:256-264`)
-- **PNG export** — captures the WebGPU scene *before* glyph conversion (`src/index.ts:249-252`)
+- **PNG export** — captures the WebGPU scene _before_ glyph conversion (`src/index.ts:249-252`)
 
 ## Tech Stack
 
-| Package | Version | Role |
-|---------|---------|------|
-| `three` | `0.177.0` | Scene, camera, geometries, `MeshPhongMaterial` |
-| `@opentui/core` | `^0.5.10` | `CliRenderer`, `FrameBufferRenderable`, input |
+| Package          | Version   | Role                                                  |
+| ---------------- | --------- | ----------------------------------------------------- |
+| `three`          | `0.177.0` | Scene, camera, geometries, `MeshPhongMaterial`        |
+| `@opentui/core`  | `^0.5.10` | `CliRenderer`, `FrameBufferRenderable`, input         |
 | `@opentui/three` | `^0.5.10` | `ThreeCliRenderer`, `SuperSampleType`, `TextureUtils` |
-| `bun-webgpu` | `0.1.7` | WebGPU binding for Bun |
-| `jimp` | `^1.6.0` | PNG save via `engine.saveToFile()` |
+| `bun-webgpu`     | `0.1.7`   | WebGPU binding for Bun                                |
+| `jimp`           | `^1.6.0`  | PNG save via `engine.saveToFile()`                    |
 
 ## Requirements
 
@@ -50,18 +50,18 @@ bun run build      # typecheck + echo build ok
 
 ## Controls
 
-| Key | Action | Source |
-|-----|--------|--------|
-| `W` / `S` / `↑` / `↓` | Move camera up / down | `src/index.ts:222-223` |
-| `A` / `D` / `←` / `→` | Orbit yaw −/+ 0.18 rad (primary) | `src/index.ts:224-232` |
-| `Q` / `E` | Orbit yaw −/+ 0.12 rad (fine) | `src/index.ts:233-236` |
-| `Z` / `X` | Dolly in / out | `src/index.ts:236-237` |
-| `Space` | Pause / resume animation | `src/index.ts:216-218` |
-| `R` | Reset camera to `(0, 2, 6)` | `src/index.ts:238-241` |
-| `U` | Cycle supersampling (GPU → CPU → OFF) | `src/index.ts:242-244` |
-| `Shift+D` | Toggle WebGPU render stats | `src/index.ts:245-248` |
-| `P` | Save PNG to `screenshots/arcade-<timestamp>.png` | `src/index.ts:249-252` |
-| `Esc` / `Ctrl+C` | Exit | `src/index.ts:210-213` |
+| Key                   | Action                                           | Source                 |
+| --------------------- | ------------------------------------------------ | ---------------------- |
+| `W` / `S` / `↑` / `↓` | Move camera up / down                            | `src/index.ts:222-223` |
+| `A` / `D` / `←` / `→` | Orbit yaw −/+ 0.18 rad (primary)                 | `src/index.ts:224-232` |
+| `Q` / `E`             | Orbit yaw −/+ 0.12 rad (fine)                    | `src/index.ts:233-236` |
+| `Z` / `X`             | Dolly in / out                                   | `src/index.ts:236-237` |
+| `Space`               | Pause / resume animation                         | `src/index.ts:216-218` |
+| `R`                   | Reset camera to `(0, 2, 6)`                      | `src/index.ts:238-241` |
+| `U`                   | Cycle supersampling (GPU → CPU → OFF)            | `src/index.ts:242-244` |
+| `Shift+D`             | Toggle WebGPU render stats                       | `src/index.ts:245-248` |
+| `P`                   | Save PNG to `screenshots/arcade-<timestamp>.png` | `src/index.ts:249-252` |
+| `Esc` / `Ctrl+C`      | Exit                                             | `src/index.ts:210-213` |
 
 Status bar (`src/index.ts:153`) shows `LIVE / PAUSED | 9 OBJECTS | WEBGPU | <mode>` and controls are pinned to the bottom row.
 
