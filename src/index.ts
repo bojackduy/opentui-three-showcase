@@ -51,9 +51,10 @@ interface ArcadeState {
 
 // ── M3 Pro MAX profile ──
 // Apple M3 Pro (arm64, 11 cores, 36GB, Metal) can sustain 120fps WebGPU with
-// 2× GPU supersampling + PCFSoftShadowMap + ACES at 200+ columns. We default
-// to MAX; press 'M' to drop to balanced if the terminal is tiny.
-const M3_MAX = true
+// 2× GPU supersampling + PCFSoftShadowMap + ACES at 200+ columns.
+// Default balanced (9 objects, 60fps) — press 'M' for MAX 16 objects / 120fps / ACES / shadows.
+// Keeps default view proven not-zoomed; MAX adds fog/extra lights.
+const M3_MAX = false
 const MAX_TARGET_FPS = 120
 const BALANCED_TARGET_FPS = 60
 
@@ -73,14 +74,23 @@ function addLabel(renderer: CliRenderer, id: string, content: string, top: numbe
   return label
 }
 
-function buildScene(aspect: number, max: boolean) {
+function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
   const scene = new Scene()
-  scene.background = new Color(0x04010f)
-  // Fog adds depth cue without extra geometry — M3 can shade it for free.
-  scene.fog = new Fog(0x04010f, 9, 22)
+  scene.background = new Color(0x030014)
+  if (max) scene.fog = new Fog(0x04010f, 9, 22)
 
-  const camera = new PerspectiveCamera(55, aspect, 0.1, 100)
-  camera.position.set(0, 2.2, 6.2)
+  // Adaptive wall scale — keep the whole 5×3 wall framed even at 60×18.
+  // 80×24 is the design target for balanced, 120×35 for MAX. Shrink positions
+  // and mesh scale linearly below that, but never below 0.55 (still readable).
+  const targetCols = max ? 120 : 80
+  const targetRows = max ? 35 : 24
+  const fit = Math.min(cols / targetCols, rows / targetRows)
+  const wallScale = Math.max(0.55, Math.min(1, fit))
+
+  const fov = max ? 55 : 60 - Math.max(0, (1 - wallScale) * 12) // widen a bit when tiny
+  const camera = new PerspectiveCamera(fov, aspect, 0.1, 100)
+  const camDist = (max ? 6.2 : 6) * (wallScale < 1 ? 1 / (0.7 + wallScale * 0.3) : 1)
+  camera.position.set(0, (max ? 2.2 : 2) * wallScale, camDist)
   camera.lookAt(0, 0, 0)
 
   scene.add(new AmbientLight(0xffffff, 0.55))
@@ -115,10 +125,10 @@ function buildScene(aspect: number, max: boolean) {
   pointLight3.position.set(-2, 1, 2)
   scene.add(pointLight3)
 
-  // 512 checker keeps floor crisp at 240 cols (480 render width).
-  const floorTexture = TextureUtils.createCheckerboard(512, new Color(0x18073d), new Color(0x071b33), 16)
+  // 512 checker keeps floor crisp at 240 cols (480 render width) — balanced uses 256 for lighter load.
+  const floorTexture = TextureUtils.createCheckerboard(max ? 512 : 256, new Color(0x18073d), new Color(0x071b33), 16)
   floorTexture.needsUpdate = true
-  const floorGeometry = new PlaneGeometry(16, 14)
+  const floorGeometry = new PlaneGeometry(max ? 16 : 13, max ? 14 : 12)
   const floorMaterial = new MeshPhongMaterial({
     map: floorTexture,
     color: 0x7060aa,
@@ -202,7 +212,8 @@ function buildScene(aspect: number, max: boolean) {
     const g = geometries[i % geometries.length]
     const m = materials[i % materials.length]
     const mesh = new Mesh(g, m)
-    mesh.position.set(x, y, z)
+    mesh.position.set(x * wallScale, y * wallScale, z * wallScale)
+    mesh.scale.setScalar(wallScale)
     mesh.rotation.set(i * 0.4, i * 0.7, 0)
     mesh.castShadow = max
     mesh.receiveShadow = max
@@ -210,17 +221,21 @@ function buildScene(aspect: number, max: boolean) {
     meshes.push(mesh)
   })
 
-  // Hero gets 1.15× scale so it's readably 3D even at 80×24.
+  // Hero gets 1.15× scale so it's readably 3D even at 80×24 — scaled by wallScale.
   if (max) {
     const hero = meshes[14]
-    if (hero) hero.scale.setScalar(1.15)
+    if (hero) hero.scale.multiplyScalar(1.15)
   } else {
     const hero = new Mesh(geometries[4], materials[4])
-    hero.position.set(0, 0, 0.7)
+    hero.position.set(0, 0, 0.7 * wallScale)
+    hero.scale.setScalar(wallScale)
     hero.castShadow = max
     scene.add(hero)
     meshes.push(hero)
   }
+  // Floor also scales so it doesn't dominate tiny viewports.
+  floor.scale.setScalar(wallScale)
+  floor.position.set(0, -2.35 * wallScale, -1 * wallScale)
 
   return {
     scene,
@@ -251,7 +266,7 @@ export async function run(renderer: CliRenderer): Promise<void> {
   const qualityTag = isMax ? "MAX (M3 Pro) — 120FPS ACES SHADOWS" : "BALANCED — 60FPS"
 
   const title = addLabel(renderer, "arcade-title", `★ 3D TERMINAL ARCADE — MAX @ ${MAX_TARGET_FPS}FPS ★`, 0, "#FF5CE1")
-  const status = addLabel(renderer, "arcade-status", `LIVE | ${objectLabel} | ${qualityTag} | GPU SS PRE_SQUEEZED`, 1, "#55F6FF")
+  const status = addLabel(renderer, "arcade-status", `LIVE | ${objectLabel} | ${qualityTag} | ULTRA 4× PRE_SQUEEZED`, 1, "#55F6FF")
   const controls = addLabel(
     renderer,
     "arcade-controls",
@@ -269,6 +284,8 @@ export async function run(renderer: CliRenderer): Promise<void> {
   })
   renderer.root.add(framebuffer)
 
+  // Default GPU 2× (proven). ULTRA 4× available via U toggle — local opentui fork at ../opentui.
+  // Toggle U: NONE → CPU 2× → GPU 2× → ULTRA 4× → NONE
   const engine = new ThreeCliRenderer(renderer, {
     width: framebuffer.width,
     height: framebuffer.height,
@@ -312,7 +329,9 @@ export async function run(renderer: CliRenderer): Promise<void> {
     } catch {}
     const term = `${renderer.terminalWidth}×${renderer.terminalHeight}`
     const termHint = renderer.terminalWidth < 140 || renderer.terminalHeight < 35 ? " — FULLSCREEN for MAX (⌘+Enter, 160×45 ideal)" : " — MAX window ✓"
-    status.content = `LIVE | ${objectLabel} | ${term} | ${qualityTag} | GPU PRE_SQUEEZED${termHint}`
+    // 4× renders at 4× cols/rows, so report effective render res too
+    const ss = (engine as unknown as { superSample?: string }).superSample ?? "ultra"
+    status.content = `LIVE | ${objectLabel} | ${term} → ${renderer.terminalWidth * 4}×${renderer.terminalHeight * 4} render | ${qualityTag} | ${String(ss).toUpperCase()} 4×${termHint}`
   } catch (error) {
     engine.destroy()
     renderer.root.remove(framebuffer)
@@ -324,8 +343,12 @@ export async function run(renderer: CliRenderer): Promise<void> {
     return
   }
 
-  const { scene, camera, pointLight, pointLight2, pointLight3, meshes, geometries, materials, textures } =
-    buildScene(engine.aspectRatio, isMax)
+  const { scene, camera, pointLight, pointLight2, pointLight3, meshes, geometries, materials, textures } = buildScene(
+    engine.aspectRatio,
+    isMax,
+    renderer.terminalWidth,
+    renderer.terminalHeight,
+  )
   engine.setActiveCamera(camera)
 
   let elapsed = 0

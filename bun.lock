@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "three-terminal-showcase",
+      "name": "@bojackduy/opentui-three-showcase",
       "dependencies": {
         "@opentui/core": "^0.5.10",
         "@opentui/three": "^0.5.10",
