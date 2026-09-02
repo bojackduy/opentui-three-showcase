@@ -9,7 +9,7 @@ import {
   TextRenderable,
   createCliRenderer,
 } from "@opentui/core"
-import { SuperSampleType, TextureUtils, ThreeCliRenderer } from "@opentui/three"
+import { SuperSampleAlgorithm, SuperSampleType, TextureUtils, ThreeCliRenderer } from "@opentui/three"
 import {
   AmbientLight,
   type BufferGeometry,
@@ -76,20 +76,21 @@ function buildScene(aspect: number) {
   const pointLight = new PointLight(0xff35ed, 18, 12, 1.5)
   scene.add(pointLight)
 
-  const floorTexture = TextureUtils.createCheckerboard(128, new Color(0x18073d), new Color(0x071b33), 16)
+  const floorTexture = TextureUtils.createCheckerboard(256, new Color(0x18073d), new Color(0x071b33), 16)
+  floorTexture.needsUpdate = true
   const floorGeometry = new PlaneGeometry(13, 12)
-  const floorMaterial = new MeshPhongMaterial({ map: floorTexture, color: 0x7060aa, shininess: 45, specular: 0x48ddff })
+  const floorMaterial = new MeshPhongMaterial({ map: floorTexture, color: 0x7060aa, shininess: 55, specular: 0x48ddff })
   const floor = new Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
   floor.position.set(0, -2.15, -1)
   scene.add(floor)
 
   const geometries: ArcadeState["geometries"] = [
-    new TorusKnotGeometry(0.48, 0.16, 72, 10),
-    new DodecahedronGeometry(0.62, 0),
-    new TorusGeometry(0.52, 0.18, 12, 36),
+    new TorusKnotGeometry(0.48, 0.16, 128, 16),
+    new DodecahedronGeometry(0.62, 1),
+    new TorusGeometry(0.52, 0.18, 24, 48),
     new BoxGeometry(0.85, 0.85, 0.85, 2, 2, 2),
-    new IcosahedronGeometry(0.92, 1),
+    new IcosahedronGeometry(0.92, 2),
   ]
   const colors = [0xff2bd6, 0x28f7fe, 0xffc857, 0x7cff6b, 0x8a5cff]
   const materials = colors.map(
@@ -154,7 +155,7 @@ export async function run(renderer: CliRenderer): Promise<void> {
   const controls = addLabel(
     renderer,
     "arcade-controls",
-    "WS up/down | AD/QE orbit left/right | ZX zoom | Space pause | P shot | U supersample | Shift+D stats | R reset | Esc quit",
+    "WS↑↓ AD/QE←→ ZX zoom | Space pause | P shot | U SS | O algo | Shift+D stats | R reset | Esc quit  — enlarge terminal = sharper",
     Math.max(2, renderer.terminalHeight - 1),
     "#C8B6FF",
   )
@@ -180,6 +181,18 @@ export async function run(renderer: CliRenderer): Promise<void> {
 
   try {
     await engine.init()
+    // PRE_SQUEEZED fuses horizontal sub-pixels before quadrant pick — visibly
+    // less stair-step on diagonal edges than STANDARD at same 2× cost.
+    // Press 'O' to flip back to STANDARD for A/B.
+    try {
+      engine.setSuperSampleAlgorithm(SuperSampleAlgorithm.PRE_SQUEEZED)
+    } catch {}
+    // Help diagnose pixelation: small terminals are the #1 cause.
+    if (renderer.terminalWidth < 100 || renderer.terminalHeight < 30) {
+      status.content = `LIVE | ${renderer.terminalWidth}×${renderer.terminalHeight} — enlarge terminal for sharper 3D (120×40 ideal) | GPU SS PRE_SQUEEZED`
+    } else {
+      status.content = `LIVE | 9 OBJECTS | ${renderer.terminalWidth}×${renderer.terminalHeight} | GPU SS PRE_SQUEEZED`
+    }
   } catch (error) {
     engine.destroy()
     renderer.root.remove(framebuffer)
@@ -244,7 +257,20 @@ export async function run(renderer: CliRenderer): Promise<void> {
       camera.lookAt(0, 0, 0)
     } else if (key.name === "u") {
       engine.toggleSuperSampling()
-      status.content = "LIVE  |  SUPERSAMPLING MODE CHANGED  |  Press U to cycle"
+      const mode = (engine as unknown as { superSample?: string }).superSample ?? "toggled"
+      status.content = `LIVE | SS ${String(mode).toUpperCase()} | Press U: GPU→CPU→OFF, O: algo toggle`
+    } else if (n === "o") {
+      try {
+        const cur = engine.getSuperSampleAlgorithm()
+        const next =
+          cur === SuperSampleAlgorithm.PRE_SQUEEZED
+            ? SuperSampleAlgorithm.STANDARD
+            : SuperSampleAlgorithm.PRE_SQUEEZED
+        engine.setSuperSampleAlgorithm(next)
+        status.content = `LIVE | SS ALGO ${next === 0 ? "STANDARD" : "PRE_SQUEEZED"} | O to toggle, U for GPU/CPU/OFF`
+      } catch {
+        status.content = "LIVE | SS algo toggle unavailable"
+      }
     } else if (key.name === "d" && key.shift) {
       debugStats = !debugStats
       engine.toggleDebugStats()
