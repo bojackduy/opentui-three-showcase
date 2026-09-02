@@ -154,7 +154,7 @@ export async function run(renderer: CliRenderer): Promise<void> {
   const controls = addLabel(
     renderer,
     "arcade-controls",
-    "WASD move | QE orbit | ZX zoom | Space pause | P shot | U supersample | Shift+D stats | R reset | Esc quit",
+    "WS up/down | AD/QE orbit left/right | ZX zoom | Space pause | P shot | U supersample | Shift+D stats | R reset | Esc quit",
     Math.max(2, renderer.terminalHeight - 1),
     "#C8B6FF",
   )
@@ -206,27 +206,38 @@ export async function run(renderer: CliRenderer): Promise<void> {
     camera.lookAt(0, 0, 0)
   }
 
+  // Auto-orbit runs every frame (yaw += delta*0.055). Manual left/right must go
+  // through yaw, not translateX, otherwise the next updateCamera() overwrites
+  // the X/Z you just set — that's why WS (Y) visibly moved but AD didn't.
   const keyHandler = (key: KeyEvent) => {
     if (key.name === "escape" || (key.ctrl && key.name === "c")) {
       destroy(renderer)
       renderer.destroy()
       return
     }
+    const n = key.name.toLowerCase()
     if (key.name === "space") {
       paused = !paused
       status.content = `${paused ? "PAUSED" : "LIVE"}  |  9 OBJECTS  |  WEBGPU  |  Space to ${paused ? "resume" : "pause"}`
-    } else if (key.name === "w") camera.translateY(0.2)
-    else if (key.name === "s") camera.translateY(-0.2)
-    else if (key.name === "a") camera.translateX(-0.2)
-    else if (key.name === "d" && !key.shift) camera.translateX(0.2)
-    else if (key.name === "q") {
+    } else if (n === "w" || key.name === "up") camera.translateY(0.35)
+    else if (n === "s" || key.name === "down") camera.translateY(-0.35)
+    // AD and QE are intentionally the same axis (horizontal orbit) so every
+    // left/right key does something visible and survives auto-orbit. AD is
+    // the primary WASD orbit (bigger step), QE is the fine adjust.
+    else if ((n === "a" && !key.shift) || key.name === "left") {
+      yaw -= 0.18
+      updateCamera()
+    } else if ((n === "d" && !key.shift) || key.name === "right") {
+      yaw += 0.18
+      updateCamera()
+    } else if (n === "q") {
       yaw -= 0.12
       updateCamera()
-    } else if (key.name === "e") {
+    } else if (n === "e") {
       yaw += 0.12
       updateCamera()
-    } else if (key.name === "z") camera.translateZ(0.35)
-    else if (key.name === "x") camera.translateZ(-0.35)
+    } else if (n === "z") camera.translateZ(0.35)
+    else if (n === "x") camera.translateZ(-0.35)
     else if (key.name === "r") {
       yaw = 0
       camera.position.set(0, 2, 6)
