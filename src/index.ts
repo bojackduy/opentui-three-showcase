@@ -97,18 +97,18 @@ function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
 
   const warm = new DirectionalLight(0xff6b35, 2.4)
   warm.position.set(6, 7, 5)
-  warm.castShadow = max
-  if (max) {
-    warm.shadow.mapSize.set(2048, 2048)
-    warm.shadow.camera.near = 0.5
-    warm.shadow.camera.far = 25
-  }
+  warm.castShadow = true
+  warm.shadow.mapSize.set(2048, 2048)
+  warm.shadow.camera.near = 0.5
+  warm.shadow.camera.far = 25
+  warm.shadow.bias = -0.0005
   scene.add(warm)
 
   const cool = new DirectionalLight(0x45a3ff, 1.9)
   cool.position.set(-6, 4, -4)
-  cool.castShadow = max
-  if (max) cool.shadow.mapSize.set(2048, 2048)
+  cool.castShadow = true
+  cool.shadow.mapSize.set(2048, 2048)
+  cool.shadow.bias = -0.0005
   scene.add(cool)
 
   const rim = new DirectionalLight(0x9d7dff, 1.2)
@@ -138,7 +138,7 @@ function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
   const floor = new Mesh(floorGeometry, floorMaterial)
   floor.rotation.x = -Math.PI / 2
   floor.position.set(0, -2.35, -1)
-  floor.receiveShadow = max
+  floor.receiveShadow = true
   scene.add(floor)
 
   // Ultra tessellation — M3 Pro chews through this at <6ms/frame.
@@ -171,9 +171,10 @@ function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
     (c) =>
       new MeshPhongMaterial({
         color: c,
-        emissive: new Color(c).multiplyScalar(max ? 0.12 : 0.08),
-        shininess: max ? 140 : 110,
+        emissive: new Color(c).multiplyScalar(max ? 0.10 : 0.06),
+        shininess: max ? 220 : 180,
         specular: 0xffffff,
+        flatShading: false,
       }),
   )
 
@@ -215,8 +216,8 @@ function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
     mesh.position.set(x * wallScale, y * wallScale, z * wallScale)
     mesh.scale.setScalar(wallScale)
     mesh.rotation.set(i * 0.4, i * 0.7, 0)
-    mesh.castShadow = max
-    mesh.receiveShadow = max
+    mesh.castShadow = true
+    mesh.receiveShadow = true
     scene.add(mesh)
     meshes.push(mesh)
   })
@@ -224,12 +225,17 @@ function buildScene(aspect: number, max: boolean, cols: number, rows: number) {
   // Hero gets 1.15× scale so it's readably 3D even at 80×24 — scaled by wallScale.
   if (max) {
     const hero = meshes[14]
-    if (hero) hero.scale.multiplyScalar(1.15)
+    if (hero) {
+      hero.scale.multiplyScalar(1.15)
+      hero.castShadow = true
+      hero.receiveShadow = true
+    }
   } else {
     const hero = new Mesh(geometries[4], materials[4])
     hero.position.set(0, 0, 0.7 * wallScale)
     hero.scale.setScalar(wallScale)
-    hero.castShadow = max
+    hero.castShadow = true
+    hero.receiveShadow = true
     scene.add(hero)
     meshes.push(hero)
   }
@@ -312,9 +318,9 @@ export async function run(renderer: CliRenderer): Promise<void> {
           shadowMap?: { enabled: boolean; type: number }
         }
         tr.toneMapping = ACESFilmicToneMapping as unknown as number
-        tr.toneMappingExposure = isMax ? 1.18 : 1.0
+        tr.toneMappingExposure = isMax ? 1.18 : 1.05
         tr.outputColorSpace = SRGBColorSpace as unknown as never
-        if (isMax && tr.shadowMap) {
+        if (tr.shadowMap) {
           tr.shadowMap.enabled = true
           tr.shadowMap.type = PCFSoftShadowMap as unknown as number
         }
@@ -329,9 +335,10 @@ export async function run(renderer: CliRenderer): Promise<void> {
     } catch {}
     const term = `${renderer.terminalWidth}×${renderer.terminalHeight}`
     const termHint = renderer.terminalWidth < 140 || renderer.terminalHeight < 35 ? " — FULLSCREEN for MAX (⌘+Enter, 160×45 ideal)" : " — MAX window ✓"
-    // 4× renders at 4× cols/rows, so report effective render res too
-    const ss = (engine as unknown as { superSample?: string }).superSample ?? "ultra"
-    status.content = `LIVE | ${objectLabel} | ${term} → ${renderer.terminalWidth * 4}×${renderer.terminalHeight * 4} render | ${qualityTag} | ${String(ss).toUpperCase()} 4×${termHint}`
+    const ss = (engine as unknown as { superSample?: string }).superSample ?? "gpu"
+    const rw = (engine as unknown as { renderWidth?: number }).renderWidth ?? renderer.terminalWidth * 2
+    const rh = (engine as unknown as { renderHeight?: number }).renderHeight ?? renderer.terminalHeight * 2
+    status.content = `LIVE | ${objectLabel} | ${term} → ${rw}×${rh} render | ${qualityTag} | ${String(ss).toUpperCase()}${termHint}`
   } catch (error) {
     engine.destroy()
     renderer.root.remove(framebuffer)
