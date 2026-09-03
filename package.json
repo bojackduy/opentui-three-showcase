@@ -60,6 +60,8 @@
   },
   "scripts": {
     "dev": "bun src/index.ts",
+    "dev:low": "bun src/index.ts --low",
+    "dev:max": "bun src/index.ts --max",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "build": "bun build src/index.ts --target bun --outfile dist/index.js --external \"@opentui/core\" --external \"@opentui/core-*\" --external \"@opentui/three\" --external three --external bun-webgpu --external jimp",
