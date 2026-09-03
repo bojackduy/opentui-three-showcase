@@ -6,17 +6,38 @@
 
 ![Demo GIF](assets/demo2.gif)
 
-`src/index.ts:58-139` builds a `THREE.Scene` with a perspective camera, 9 Phong-shaded meshes (TorusKnot, Dodecahedron, Torus, Box, Icosahedron), a checkerboard depth plane, and 4 lights (Ambient + 2 Directional + 1 orbiting PointLight). Everything is rasterized by `ThreeCliRenderer` into a `FrameBufferRenderable` at 60 FPS and converted to terminal glyphs. Yes, it's definitely 3D.
+`src/index.ts` builds a `THREE.Scene` with a perspective camera, Phong-shaded meshes (TorusKnot, Dodecahedron, Torus, Box, Icosahedron, and more in MAX), a checkerboard depth plane, and up to 6 lights (Ambient + Directionals + orbiting PointLights). Everything is rasterized by `ThreeCliRenderer` into a `FrameBufferRenderable` and converted to terminal glyphs. Yes, it's definitely 3D.
 
 ## Features
 
-- **True 3D in the terminal** — `PerspectiveCamera` (`src/index.ts:62`) + depth, not ASCII tricks
-- **WebGPU via `bun-webgpu`** — `ThreeCliRenderer.init()` awaited explicitly with fallback to `TextRenderable` on failure (`src/index.ts:181-192`)
-- **9 animated objects** — 8 on a 3-row grid + 1 hero in center, each with distinct `MeshPhongMaterial` (shininess 110, white specular) (`src/index.ts:95-128`)
-- **Live lighting** — warm/cool directional lights + magenta point light orbiting at `sin(elapsed)` (`src/index.ts:66-77`, `277`)
-- **GPU supersampling** — cycle `GPU → CPU → OFF` with `U` (`SuperSampleType.GPU`, `src/index.ts:172-244`)
-- **Responsive** — usable at 80×24, adapts to terminal resizes (`src/index.ts:256-264`)
-- **PNG export** — captures the WebGPU scene _before_ glyph conversion (`src/index.ts:249-252`)
+- **True 3D in the terminal** — `PerspectiveCamera` + depth, not ASCII tricks
+- **WebGPU via `bun-webgpu`** — `ThreeCliRenderer.init()` awaited explicitly with fallback to `TextRenderable` on failure
+- **Animated objects** — distinct `MeshPhongMaterial` per mesh (high `shininess`, white specular), auto-rotating + bobbing, with an orbiting point light
+- **Quality profiles** — `LOW` / `BALANCED` / `MAX` (see below); `MAX` adds 16 objects, 120 FPS, ACES tone mapping, PCF soft shadows
+- **Supersampling** — `U` cycles `NONE → CPU 2× → GPU 2× → ULTRA` (ULTRA needs the local `opentui` fork); `O` toggles `STANDARD ↔ PRE_SQUEEZED`
+- **Adaptive small terminals** — wall scale, camera distance, and FOV shrink automatically below the `80×24` design target so the whole wall stays framed
+- **Responsive** — adapts to terminal resizes via `engine.setSize` + `camera.aspect = engine.aspectRatio`
+- **PNG export** — captures the WebGPU scene _before_ glyph conversion (`P` → `screenshots/`)
+
+## Quality Profiles
+
+| Profile    | FPS | Supersample | Shadows | Tone mapping               | Lights | Meshes     | Tessellation |
+| ---------- | --- | ----------- | ------- | -------------------------- | ------ | ---------- | ------------ |
+| `LOW`      | 30  | `NONE` 1×   | off     | `NoToneMapping` + Linear   | 2      | 5          | low          |
+| `BALANCED` | 60  | `GPU` 2×    | on      | `ACESFilmic` 1.05 + sRGB   | 6      | 9          | medium       |
+| `MAX`      | 120 | `GPU` 2×    | on      | `ACESFilmic` 1.18 + sRGB   | 6      | 16 + fog   | ultra        |
+
+Select at startup (full effect, including geometry):
+
+```sh
+bun run dev:low        # weak iGPU — SS NONE, no shadows, 2 lights, 5 meshes, 30 FPS
+bun run dev            # balanced default (60 FPS, 9 objects)
+bun run dev:max        # M3 Pro — 16 objects, 120 FPS, ACES, shadows
+```
+
+Equivalents: `bun src/index.ts --low` / `--quality=low|balanced|max`, or env `ARCADE_QUALITY=low` / `LOW_POWER=1`.
+
+Press `M` while running to cycle `LOW → BALANCED → MAX` live (SS / FPS / shadows / tone mapping / light visibility switch immediately; mesh count and tessellation from startup are kept, hidden extras are toggled by visibility — restart with the flag for the full geometry swap).
 
 ## Tech Stack
 
@@ -46,26 +67,30 @@ bun run dev   # alias for bun src/index.ts
 Other scripts:
 
 ```sh
+bun run dev:low    # LOW profile (weak iGPU)
+bun run dev:max    # MAX profile (M3 Pro)
 bun run typecheck  # tsc --noEmit --skipLibCheck
-bun run build      # typecheck + echo build ok
+bun run build      # bun build → dist/index.js
 ```
 
 ## Controls
 
-| Key                   | Action                                           | Source                 |
-| --------------------- | ------------------------------------------------ | ---------------------- |
-| `W` / `S` / `↑` / `↓` | Move camera up / down                            | `src/index.ts:222-223` |
-| `A` / `D` / `←` / `→` | Orbit yaw −/+ 0.18 rad (primary)                 | `src/index.ts:224-232` |
-| `Q` / `E`             | Orbit yaw −/+ 0.12 rad (fine)                    | `src/index.ts:233-236` |
-| `Z` / `X`             | Dolly in / out                                   | `src/index.ts:236-237` |
-| `Space`               | Pause / resume animation                         | `src/index.ts:216-218` |
-| `R`                   | Reset camera to `(0, 2, 6)`                      | `src/index.ts:238-241` |
-| `U`                   | Cycle supersampling (GPU → CPU → OFF)            | `src/index.ts:242-244` |
-| `Shift+D`             | Toggle WebGPU render stats                       | `src/index.ts:245-248` |
-| `P`                   | Save PNG to `screenshots/arcade-<timestamp>.png` | `src/index.ts:249-252` |
-| `Esc` / `Ctrl+C`      | Exit                                             | `src/index.ts:210-213` |
+| Key                   | Action                                              |
+| --------------------- | --------------------------------------------------- |
+| `W` / `S` / `↑` / `↓` | Move camera up / down                               |
+| `A` / `D` / `←` / `→` | Orbit yaw −/+ 0.18 rad (primary)                    |
+| `Q` / `E`             | Orbit yaw −/+ 0.12 rad (fine)                       |
+| `Z` / `X`             | Dolly in / out                                      |
+| `Space`               | Pause / resume animation                            |
+| `R`                   | Reset camera                                        |
+| `U`                   | Cycle supersampling (`NONE → CPU → GPU → ULTRA`)    |
+| `O`                   | Toggle supersample algorithm (`STANDARD ↔ PRE_SQUEEZED`) |
+| `M`                   | Cycle quality (`LOW → BALANCED → MAX`)              |
+| `Shift+D`             | Toggle WebGPU render stats (Render / Readback / SS ms) |
+| `P`                   | Save PNG to `screenshots/arcade-max-<timestamp>.png` |
+| `Esc` / `Ctrl+C`      | Exit                                                |
 
-Status bar (`src/index.ts:153`) shows `LIVE / PAUSED | 9 OBJECTS | WEBGPU | <mode>` and controls are pinned to the bottom row.
+Status bar shows `LIVE / PAUSED | <OBJECTS> | <term> → <render> | <quality> | <SS mode>` and controls are pinned to the bottom row. On laggy machines: switch to `LOW` (or press `M`) and check `Shift+D` — `Total Draw` should stay under ~25 ms; shrinking the terminal also halves the render pixels.
 
 ## Screenshot
 
@@ -74,19 +99,21 @@ Press `P` while running. Output is written via `engine.saveToFile()` to the loca
 ## How It Works
 
 ```
-CliRenderer (full-terminal, 60 FPS)
+CliRenderer (full-terminal, 30/60/120 FPS by profile)
   ├─ TextRenderable: title / status / controls (zIndex 30)
   └─ FrameBufferRenderable (zIndex 10, full width/height)
        └─ ThreeCliRenderer.drawScene(scene, frameBuffer, delta)
-            ├─ Scene: background #030014, 13×12 checkerboard floor
-            ├─ Camera: PerspectiveCamera 60°, 0.1-100, at (0,2,6)
-            ├─ Lights: Ambient(0.6) + Directional(warm/cool) + Point(magenta, orbiting)
-            └─ Meshes: 9 × MeshPhongMaterial, auto-rotating + bobbing
+            ├─ Scene: background #030014, checkerboard floor (128/256/512 by profile)
+            ├─ Camera: PerspectiveCamera 55-72° (widens on tiny terminals), at (0,2,6)
+            ├─ Lights: Ambient + Directionals + up to 3 orbiting PointLights (2 in LOW)
+            └─ Meshes: 5/9/16 × MeshPhongMaterial, auto-rotating + bobbing + auto-orbit
 ```
 
-- **Explicit engine path**: `new ThreeCliRenderer(...)` with `autoResize: false` and `focalLength: 8` (`src/index.ts:171-179`) — size is driven manually on resize for correct aspect (`camera.aspect = engine.aspectRatio`).
-- **Animation loop**: `renderer.setFrameCallback` drives rotation (`0.18 + i*0.045` / `0.32 + i*0.06`), vertical bob (`sin(elapsed*1.2 + i) * 0.08`), point-light orbit, and auto-yaw (`0.055 rad/s`) (`src/index.ts:268-284`).
-- **Cleanup**: `destroy()` disposes geometries/materials/textures and removes the framebuffer (`src/index.ts:289-300`).
+- **Explicit engine path**: `new ThreeCliRenderer(...)` with `autoResize: false` and `focalLength: 8` — size is driven manually on resize for correct aspect (`camera.aspect = engine.aspectRatio`).
+- **Animation loop**: `renderer.setFrameCallback` drives rotation, vertical bob, point-light orbits, and auto-yaw (slower in LOW so input stays responsive).
+- **De-noised supersampling**: quadrant blocks whose 4 texels are close (`maxDist < 0.02`) collapse to a single averaged solid instead of dithering — kills the black/grey speckles inside smooth specular gradients. Patched in the local `opentui` fork (`packages/three/src/shaders/supersampling.wgsl`, `packages/native/src/buffer.zig` for the CPU path).
+- **ULTRA mode**: the local fork adds `SuperSampleType.ULTRA` (`packages/three/src/WGPURenderer.ts`, `canvas.ts`) — toggle with `U`. Stock `@opentui/three` has only `NONE/CPU/GPU`.
+- **Cleanup**: `destroy()` disposes geometries/materials/textures and removes the framebuffer.
 
 ## Project Structure
 
@@ -101,4 +128,4 @@ three-terminal-showcase/
 
 ## License
 
-Private — not published.
+AGPL-3.0-or-later — see [LICENSE](LICENSE).
